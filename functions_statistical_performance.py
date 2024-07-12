@@ -6,7 +6,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.feature_selection import RFE
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import precision_score, recall_score, roc_auc_score, roc_curve, average_precision_score, precision_recall_curve
+from sklearn.metrics import balanced_accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve, average_precision_score, precision_recall_curve
 from scipy import interp
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import classification_report
@@ -79,57 +79,154 @@ def Accuracykfold(X,y,splits):
     return performancesAccuracy
 
 # returns performances and splits/models used in the cross-validation
-def AUCAUPkfold(X,y,smoteflag,verbose=True):
-    numfolds=5;
-    numlabels=4;
+from sklearn.metrics import balanced_accuracy_score
+import numpy as np
+from imblearn.over_sampling import SMOTE
+from sklearn.model_selection import StratifiedKFold
+from sklearn.ensemble import RandomForestClassifier
+
+
+def AUCAUPkfold(X, y, smoteflag, verbose=True):
+    numfolds = 5
+    numlabels = 4
     cv = StratifiedKFold(n_splits=numfolds, shuffle=True)
     Xs = np.copy(X)
-    ys=np.copy(y)
-    
-    if smoteflag==True:
-        smote=SMOTE()
-        Xs, ys= smote.fit_sample(Xs, ys)
-        
-    performancesAUC=np.empty([numfolds, numlabels]);
-    performancesAUP=np.empty([numfolds, numlabels]);
-    splits=[];
-    model_per_fold=[]
-    index=0
+    ys = np.copy(y)
+
+    if smoteflag:
+        smote = SMOTE()
+        Xs, ys = smote.fit_resample(Xs, ys)
+
+    performancesAUC = np.empty([numfolds, numlabels])
+    performancesAUP = np.empty([numfolds, numlabels])
+    performancesBalancedAcc = np.empty(numfolds)
+    splits = []
+    model_per_fold = []
+    index = 0
+
     for train, test in cv.split(Xs, ys):
-        # print("%s %s" % (train, test))
-        clf = RandomForestClassifier(n_estimators = 200, max_features='sqrt', max_depth=420, random_state=0)
-        #clf = RandomForestClassifier(n_estimators = 1800, max_features='sqrt', max_depth=260)
-        #{'n_estimators': 200, 'max_features': 'sqrt', 'max_depth': 420}
-        
+        clf = RandomForestClassifier(n_estimators=200, max_features='sqrt', max_depth=420, random_state=0)
+
         splits.append([train, test])
-        #print(Xs[train,:].shape)
-        #print(ys[train].shape)
-        clf.fit(Xs[train,:], ys[train])
+        clf.fit(Xs[train, :], ys[train])
 
         # Predicting the Test set results
-        y_pred = clf.predict(Xs[test,:])
-        y_probs= clf.predict_proba(Xs[test,:])
-        performancesAUC[index,:]=np.array(multiclass_roc_auc_score(ys[test], y_probs, average=None))
-        performancesAUP[index,:]=np.array(multiclass_average_precision_score(ys[test], y_probs, average=None))
-        index+=1
+        y_pred = clf.predict(Xs[test, :])
+        y_probs = clf.predict_proba(Xs[test, :])
+
+        performancesAUC[index, :] = np.array(multiclass_roc_auc_score(ys[test], y_probs, average=None))
+        performancesAUP[index, :] = np.array(multiclass_average_precision_score(ys[test], y_probs, average=None))
+        performancesBalancedAcc[index] = balanced_accuracy_score(ys[test], y_pred)
+
+        index += 1
         model_per_fold.append(clf)
-        #if verbose==True:
-        #    print(multiclass_roc_auc_score(ys[test], y_probs, average=None))
-    
-    if verbose==True:
+
+    if verbose:
         print("AUC: average over the folds")
         print(performancesAUC.mean(axis=0))
         print("AUC: std over the folds")
         print(performancesAUC.std(axis=0))
-        
-    if verbose==True:
+
         print("AUP: average over the folds")
         print(performancesAUP.mean(axis=0))
         print("AUP: std over the folds")
         print(performancesAUP.std(axis=0))
-        
-        
-    return (performancesAUC, performancesAUP, splits, model_per_fold) 
+
+        print("Balanced Accuracy: average over the folds")
+        print(performancesBalancedAcc.mean())
+        print("Balanced Accuracy: std over the folds")
+        print(performancesBalancedAcc.std())
+
+    return (performancesAUC, performancesAUP, splits, model_per_fold)
+
+
+# Helper functions
+def multiclass_roc_auc_score(y_true, y_score, average="macro"):
+    from sklearn.metrics import roc_auc_score
+    return roc_auc_score(y_true, y_score, average=average, multi_class='ovo')
+
+
+def multiclass_average_precision_score(y_true, y_score, average="macro"):
+    from sklearn.metrics import average_precision_score
+    return average_precision_score(y_true, y_score, average=average)
+
+
+from sklearn.metrics import balanced_accuracy_score
+import numpy as np
+from imblearn.over_sampling import SMOTE
+from sklearn.model_selection import StratifiedKFold
+from sklearn.ensemble import RandomForestClassifier
+
+
+def AUCAUPkfold(X, y, smoteflag, verbose=True):
+    numfolds = 5
+    numlabels = 4
+    cv = StratifiedKFold(n_splits=numfolds, shuffle=True)
+    Xs = np.copy(X)
+    ys = np.copy(y)
+
+    if smoteflag:
+        smote = SMOTE()
+        Xs, ys = smote.fit_resample(Xs, ys)
+
+    performancesAUC = np.empty([numfolds, numlabels])
+    performancesAUP = np.empty([numfolds, numlabels])
+    performancesBalancedAcc = np.empty(numfolds)
+    splits = []
+    model_per_fold = []
+    index = 0
+
+    for train, test in cv.split(Xs, ys):
+        clf = RandomForestClassifier(n_estimators=200, max_features='sqrt', max_depth=420, random_state=0)
+
+        splits.append([train, test])
+        clf.fit(Xs[train, :], ys[train])
+
+        # Predicting the Test set results
+        y_pred = clf.predict(Xs[test, :])
+        y_probs = clf.predict_proba(Xs[test, :])
+
+        performancesAUC[index, :] = np.array(multiclass_roc_auc_score(ys[test], y_probs, average=None))
+        performancesAUP[index, :] = np.array(multiclass_average_precision_score(ys[test], y_probs, average=None))
+        performancesBalancedAcc[index] = balanced_accuracy_score(ys[test], y_pred)
+
+        index += 1
+        model_per_fold.append(clf)
+
+    if verbose:
+        print("AUC: average over the folds")
+        print(performancesAUC.mean(axis=0))
+        print("AUC: std over the folds")
+        print(performancesAUC.std(axis=0))
+
+        print("AUP: average over the folds")
+        print(performancesAUP.mean(axis=0))
+        print("AUP: std over the folds")
+        print(performancesAUP.std(axis=0))
+
+        print("Balanced Accuracy: average over the folds")
+        print(performancesBalancedAcc.mean())
+        print("Balanced Accuracy: std over the folds")
+        print(performancesBalancedAcc.std())
+
+    return (performancesAUC, performancesAUP, splits, model_per_fold)
+
+
+# Helper functions
+def multiclass_roc_auc_score(y_true, y_score, average=None):
+    from sklearn.preprocessing import label_binarize
+    from sklearn.metrics import roc_auc_score
+    # Binarize the output
+    y_true_bin = label_binarize(y_true, classes=np.unique(y_true))
+    return roc_auc_score(y_true_bin, y_score, average=average, multi_class='ovr')
+
+
+def multiclass_average_precision_score(y_true, y_score, average=None):
+    from sklearn.preprocessing import label_binarize
+    from sklearn.metrics import average_precision_score
+    # Binarize the output
+    y_true_bin = label_binarize(y_true, classes=np.unique(y_true))
+    return average_precision_score(y_true_bin, y_score, average=average)
 
 
 def ROCkfold(X,y,splits,verbose=True):
